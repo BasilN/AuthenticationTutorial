@@ -2,7 +2,9 @@
 
     //load all the things we need
     var LocalStrategy = require('passport-local').Strategy;
-    var FacebookStratevy = require('passport-facebook').Strategy;
+    var FacebookStrategy = require('passport-facebook').Strategy;
+    var TwitterStrategy = require('passport-twitter').Strategy;
+    var GoogleStrategy = require('passport-google-oauth').OAuth2Strategy;
 
     var User = require('../app/models/user');
 
@@ -28,6 +30,122 @@
             });
         });
 
+
+        // =========================================================================
+        // FACEBOOK ============================================================
+        // =========================================================================
+        passport.use(new FacebookStrategy({
+          clientID       : configAuth.facebookAuth.clientID,
+          clientSecret   : configAuth.facebookAuth.clientSecret,
+          callbackURL    : configAuth.facebookAuth.callbackURL
+        },
+        function(token, refreshToken, profile, done){
+          process.nextTick(function(){
+            User.findOne({'facebook.id' : profile.id}, function(err, user){
+              if(err)
+                return done(err);
+
+              if(user){
+
+                return done(null, user);
+
+              } else {
+
+                var newUser = new User();
+                newUser.facebook.id = profile.id;
+                newUser.facebook.token = token;
+                newUser.facebook.name = profile.name.givenName + ' ' + profile.name.familyName;
+                newUser.facebook.email = profile.emails[0].value;
+
+                newUser.save(function(err){
+                  if(err)
+                    throw err;
+                  return done(null, newUser);
+                });
+              }
+            });
+          });
+        }));
+        // =========================================================================
+        // Twitter ============================================================
+        // =========================================================================
+        passport.use(new TwitterStrategy({
+          consumerKey    : configAuth.twitterAuth.consumerKey,
+          consumerSecret : configAuth.twitterAuth.consumerSecret,
+          callbackURL    : configAuth.twitterAuth.callbackURL
+        },
+        function(token, tokenSecret, profile, done){
+          process.nextTick(function(){
+            User.findOne({'twitter.id' : profile.id}, function(err, user){
+              if(err)
+                return done(err);
+
+              if(user){
+                return done(null, user);
+              }
+              else {
+                var newUser = new User();
+                newUser.twitter.id = profile.id;
+                newUser.twitter.token = token;
+                newUser.twitter.username = profile.username;
+                newUser.twitter.displayName = profile.displayName;
+
+                newUser.save(function(err){
+                  if(err)
+                    throw err;
+                  return done(null, newUser);
+                });
+              }
+            });
+          });
+        }));
+
+        // =========================================================================
+        // GOOGLE ==================================================================
+        // =========================================================================
+        passport.use(new GoogleStrategy({
+
+          clientID        : configAuth.googleAuth.clientID,
+          clientSecret    : configAuth.googleAuth.clientSecret,
+          callbackURL     : configAuth.googleAuth.callbackURL,
+
+        },
+        function(token, refreshToken, profile, done) {
+
+          // make the code asynchronous
+          // User.findOne won't fire until we have all our data back from Google
+          process.nextTick(function() {
+
+            // try to find the user based on their google id
+            User.findOne({ 'google.id' : profile.id }, function(err, user) {
+              if (err)
+                return done(err);
+
+                if (user) {
+
+                  // if a user is found, log them in
+                  return done(null, user);
+                } else {
+                  // if the user isnt in our database, create a new user
+                  var newUser          = new User();
+
+                  // set all of the relevant information
+                  newUser.google.id    = profile.id;
+                  newUser.google.token = token;
+                  newUser.google.name  = profile.displayName;
+                  newUser.google.email = profile.emails[0].value; // pull the first email
+
+                  // save the user
+                  newUser.save(function(err) {
+                    if (err)
+                      throw err;
+                      return done(null, newUser);
+                    });
+                  }
+                });
+              });
+
+            }));
         // =========================================================================
         // LOCAL SIGNUP ============================================================
         // =========================================================================
@@ -35,7 +153,7 @@
         //we are using named strategies since we have one for login and one for signup
         //by default, if there was no name, it would just be called 'local'
 
-        passport.use('local-signup', new LocalStrategy({
+          passport.use('local-signup', new LocalStrategy({
           // by default, local strategy uses username and password, we will override with email
           usernameField :'email',
           passwordField :'password',
